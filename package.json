@@ -5,6 +5,7 @@
   "bin": {
     "googlephotorg": "./index.js"
   },
+  "repository": "https://github.com/kopiro/googlephotorg",
   "author": "Flavio De Stefano <destefano.flavio@gmail.com>",
   "license": "MIT",
   "dependencies": {
