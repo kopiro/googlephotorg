@@ -12,9 +12,11 @@ var moment = require('moment');
 var manifest = require('./package.json');
 var argv = require('yargs').argv;
 
-var config = new Configstore(manifest.name, {
-	inputDirectory: ""
-});
+var config = new Configstore(manifest.name);
+
+global.inputPath = null;
+global.outputPath = null;
+global.region = null;
 
 function cexit(message) {
 	console.error(chalk.red(message));
@@ -25,9 +27,8 @@ function cwarn(message) {
 	console.error(chalk.yellow(message));
 }
 
-function configure() {
-	inquirer.prompt([
-	{
+function getOpt() {
+	return [{
 		type: "input",
 		name: "inputDirectory",
 		message: "Google Photos (input) directory",
@@ -44,16 +45,15 @@ function configure() {
 		name: "region",
 		message: "Subdirectory",
 		default: config.get('region') || 'Home'
-	},
-	], function(answers) {
-		config.set('inputDirectory', answers.inputDirectory);
-		config.set('outputDirectory', answers.outputDirectory);
-		config.set('region', answers.region);
-	});
+	}];
 }
 
 function startOver() {	
-	fs.readdirSync(inputPath).map(function(fileName) {
+	if (!fs.existsSync(global.inputPath)) cexit("Input directory <" + global.inputPath + "> doesn't exists");
+	if (!fs.existsSync(global.outputPath)) cexit("Output directory <" + global.outputPath + "> doesn't exists");
+	if (!global.region) cexit("Region is empty");
+	
+	var files = fs.readdirSync(global.inputPath).map(function(fileName) {
 		var inputFile = path.join(inputPath, fileName);
 		var stat = fs.statSync(inputFile);
 		var keep = stat.isFile() && fileName.substr(0,1) !== '.';
@@ -64,20 +64,22 @@ function startOver() {
 		};
 	}).filter(function(fileObj) {
 		return fileObj.keep;
-	}).forEach(processFile);
+	});
+
+	if (files.length === 0) {
+		cwarn("No files found");
+	} else {
+		files.forEach(processFile);
+	}
 }
 
 function processFile(fileObj) {
-	try {
-		new ExifImage({ 
-			image: fileObj.inputFile
-		}, function(err, data) {
-			if (!err && data.exif) fileObj.exif = data.exif;
-			choicePathForFile(fileObj);
-		});
-	} catch (err) {
+	new ExifImage({ 
+		image: fileObj.inputFile
+	}, function(err, data) {
+		if (!err && data && data.exif) fileObj.exif = data.exif;
 		choicePathForFile(fileObj);
-	}
+	});
 }
 
 function choicePathForFile(fileObj) {
@@ -92,9 +94,9 @@ function choicePathForFile(fileObj) {
 	}
 
 	fileObj.outputDirectory = path.join(
-		outputPath,
+		global.outputPath,
 		date.format('YYYY'), 
-		region, 
+		global.region, 
 		date.format('YYYY-MM-DD')
 	);
 	fileObj.outputFile = path.join(fileObj.outputDirectory, path.basename(fileObj.inputFile));
@@ -120,24 +122,26 @@ function moveFile(fileObj) {
 //////////
 
 if (argv.configure) {
-	configure();
-} else {
-	
-	var inputPath = config.get('inputDirectory');
-	if (!fs.existsSync(inputPath)) {
-		cexit("Input directory <" + inputPath + "> doesn't exists");
-	}
+	inquirer.prompt(getOpt(), function(answers) {
+		config.set('inputDirectory', answers.inputDirectory);
+		config.set('outputDirectory', answers.outputDirectory);
+		config.set('region', answers.region);
+	});
 
-	var outputPath = config.get('outputDirectory');
-	if (!fs.existsSync(outputPath)) {
-		cexit("Output directory <" + outputPath + "> doesn't exists");
-	}
-
-	var region = config.get('region');
-	if (!region) {
-		cexit("Region is empty");
-	}
-
-	startOver();
-
+	process.exit();	
 }
+
+if (argv.cron) {
+	global.inputPath = config.get('inputDirectory');
+	global.outputPath = config.get('outputDirectory');
+	global.region = config.get('region');
+	startOver();
+} else {
+	inquirer.prompt(getOpt(), function(answers) {
+		global.inputPath = answers.inputDirectory;
+		global.outputPath = answers.outputDirectory;
+		global.region = answers.region;
+		startOver();
+	});
+}
+

@@ -16,19 +16,25 @@ It read the EXIF data of the image to detect the date. If no EXIF is found, a fa
 npm -g install googlephotorg
 ```
 
-## Configure
-
-```
-googlephotorg --configure
-```
-
 ## Usage
 
 ```
 googlephotorg
 ```
 
-## Extra: install a CRON
+## Configure for a CRON job
+
+```
+googlephotorg --configure
+```
+
+## Usage in CRON
+
+It will read from the configured values instead to ask.
+
+```
+googlephotorg --cron`
+```
 
 ```
 crontab -e
