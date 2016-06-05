@@ -14,9 +14,9 @@ var argv = require('yargs').argv;
 
 var config = new Configstore(manifest.name);
 
-global.inputPath = null;
-global.outputPath = null;
-global.region = null;
+var inputPath = null;
+var outputPath = null;
+var region = null;
 
 function cexit(message) {
 	console.error(chalk.red(message));
@@ -49,11 +49,11 @@ function getOpt() {
 }
 
 function startOver() {	
-	if (!fs.existsSync(global.inputPath)) cexit("Input directory <" + global.inputPath + "> doesn't exists");
-	if (!fs.existsSync(global.outputPath)) cexit("Output directory <" + global.outputPath + "> doesn't exists");
-	if (!global.region) cexit("Region is empty");
+	if (!fs.existsSync(inputPath)) cexit("Input directory <" + inputPath + "> doesn't exists");
+	if (!fs.existsSync(outputPath)) cexit("Output directory <" + outputPath + "> doesn't exists");
+	if (!region) cexit("Region is empty");
 	
-	var files = fs.readdirSync(global.inputPath).map(function(fileName) {
+	var files = fs.readdirSync(inputPath).map(function(fileName) {
 		var inputFile = path.join(inputPath, fileName);
 		var stat = fs.statSync(inputFile);
 		var keep = stat.isFile() && fileName.substr(0,1) !== '.';
@@ -94,9 +94,9 @@ function choicePathForFile(fileObj) {
 	}
 
 	fileObj.outputDirectory = path.join(
-		global.outputPath,
+		outputPath,
 		date.format('YYYY'), 
-		global.region, 
+		region, 
 		date.format('YYYY-MM-DD')
 	);
 	fileObj.outputFile = path.join(fileObj.outputDirectory, path.basename(fileObj.inputFile));
@@ -132,15 +132,15 @@ if (argv.configure) {
 }
 
 if (argv.cron) {
-	global.inputPath = config.get('inputDirectory');
-	global.outputPath = config.get('outputDirectory');
-	global.region = config.get('region');
+	inputPath = config.get('inputDirectory');
+	outputPath = config.get('outputDirectory');
+	region = config.get('region');
 	startOver();
 } else {
 	inquirer.prompt(getOpt(), function(answers) {
-		global.inputPath = answers.inputDirectory;
-		global.outputPath = answers.outputDirectory;
-		global.region = answers.region;
+		inputPath = answers.inputDirectory;
+		outputPath = answers.outputDirectory;
+		region = answers.region;
 		startOver();
 	});
 }
