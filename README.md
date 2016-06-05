@@ -1,5 +1,8 @@
 # googlephotorg : Google Photo organizer
 
+![NPM version](https://img.shields.io/npm/dm/googlephotorg.svg)
+![NPM downloads](https://img.shields.io/npm/dt/googlephotorg.svg)
+
 With this tool you can easily move the uploaded photos by Google Photos in the default directory (`~/Google Drive/Google Photos`) in a better file-system structured directory like this:
 
 `~/Google Drive/Photos/2016/Parma/2016-03-26/FILE.jpg`
