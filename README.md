@@ -15,6 +15,9 @@ It read the EXIF data of the image to detect the date. If no EXIF is found, a fa
 
 ## Install
 
+[![NPM](https://nodei.co/npm/googlephotorg.png)](https://npmjs.org/package/googlephotorg)
+
+
 ```
 npm -g install googlephotorg
 ```
