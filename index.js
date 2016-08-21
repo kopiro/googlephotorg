@@ -87,17 +87,13 @@ function choicePathForFile(fileObj) {
 
 	if (fileObj.exif && fileObj.exif.DateTimeOriginal) {
 		date = moment(fileObj.exif.DateTimeOriginal.substr(0,10), "YYYY:MM:DD");
-	} else if (fileObj.stat.ctime) {
-		date = moment(new Date(fileObj.stat.mtime));
-	} else {
-		date = moment();
 	}
 
 	fileObj.outputDirectory = path.join(
 		outputPath,
-		date.format('YYYY'), 
+		(date || moment()).format('YYYY'), 
 		region, 
-		date.format('YYYY-MM-DD')
+		(date ? date.format('YYYY-MM-DD') : 'NO_DATE')
 	);
 	fileObj.outputFile = path.join(fileObj.outputDirectory, path.basename(fileObj.inputFile));
 
