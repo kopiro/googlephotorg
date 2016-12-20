@@ -87,6 +87,9 @@ function choicePathForFile(fileObj) {
 
 	if (fileObj.exif && fileObj.exif.DateTimeOriginal) {
 		date = moment(fileObj.exif.DateTimeOriginal.substr(0,10), "YYYY:MM:DD");
+	} else {
+		cwarn("File <" + fileObj.inputFile + "> doesn't contain EXIF data - fallback to creation date");
+		date = moment( fs.statSync(fileObj.inputFile).birthtime );
 	}
 
 	fileObj.outputDirectory = path.join(
@@ -123,19 +126,18 @@ if (argv.configure) {
 		config.set('outputDirectory', answers.outputDirectory);
 		config.set('region', answers.region);
 	});
-
 	process.exit();	
 }
 
 if (argv.cron) {
-	inputPath = config.get('inputDirectory');
-	outputPath = config.get('outputDirectory');
+	inputPath = config.get('inputDirectory').replace(/\\ /g, ' ').trim();
+	outputPath = config.get('outputDirectory').replace(/\\ /g, ' ').trim();
 	region = config.get('region');
 	startOver();
 } else {
 	inquirer.prompt(getOpt(), function(answers) {
-		inputPath = answers.inputDirectory;
-		outputPath = answers.outputDirectory;
+		inputPath = answers.inputDirectory.replace(/\\ /g, ' ').trim();
+		outputPath = answers.outputDirectory.replace(/\\ /g, ' ').trim();
 		region = answers.region;
 		startOver();
 	});
