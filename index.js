@@ -126,10 +126,7 @@ if (argv.configure) {
 		config.set('outputDirectory', answers.outputDirectory);
 		config.set('region', answers.region);
 	});
-	process.exit();	
-}
-
-if (argv.cron) {
+} else if (argv.cron) {
 	inputPath = config.get('inputDirectory').replace(/\\ /g, ' ').trim();
 	outputPath = config.get('outputDirectory').replace(/\\ /g, ' ').trim();
 	region = config.get('region');
