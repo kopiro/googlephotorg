@@ -1,26 +1,27 @@
 #!/usr/bin/env node
 
-var _ = require('underscore');
-var Configstore = require('configstore');
-var inquirer = require("inquirer");
-var chalk = require('chalk');
-var fs = require('fs-extended');
-var path = require('path');
-var ExifImage = require('exif').ExifImage;
-var moment = require('moment');
+const Configstore = require('configstore');
+const inquirer = require("inquirer");
+const chalk = require('chalk');
+const fs = require('fs-extended');
+const path = require('path');
+const ExifImage = require('exif').ExifImage;
+const moment = require('moment');
+const walk = require('walk');
 
-var manifest = require('./package.json');
-var argv = require('yargs').argv;
+const manifest = require('./package.json');
+const argv = require('yargs').argv;
 
-var config = new Configstore(manifest.name);
+function clog(message) {
+	console.error(chalk.blue(message));
+}
 
-var inputPath = null;
-var outputPath = null;
-var region = null;
+function csucc(message) {
+	console.error(chalk.green(message));
+}
 
-function cexit(message) {
+function cerr(message) {
 	console.error(chalk.red(message));
-	process.exit(1);
 }
 
 function cwarn(message) {
@@ -29,114 +30,145 @@ function cwarn(message) {
 
 function getOpt() {
 	return [{
-		type: "input",
-		name: "inputDirectory",
-		message: "Google Photos (input) directory",
+		type: 'input',
+		name: 'inputDirectory',
+		message: 'Google Photos (input) directory',
 		default: config.get('inputDirectory') || process.env.HOME + '/Google Drive/Google Photos'
 	},
 	{
-		type: "input",
-		name: "outputDirectory",
-		message: "Photos (output) directory",
+		type: 'input',
+		name: 'outputDirectory',
+		message: 'Photos (output) directory',
 		default: config.get('outputDirectory') || process.env.HOME + '/Google Drive/Photos'
 	},
 	{
-		type: "input",
-		name: "region",
-		message: "Subdirectory",
+		type: 'input',
+		name: 'region',
+		message: 'Subdirectory',
 		default: config.get('region') || 'Home'
 	}];
 }
 
-function startOver() {	
-	if (!fs.existsSync(inputPath)) cexit("Input directory <" + inputPath + "> doesn't exists");
-	if (!fs.existsSync(outputPath)) cexit("Output directory <" + outputPath + "> doesn't exists");
-	if (!region) cexit("Region is empty");
-	
-	var files = fs.readdirSync(inputPath).map(function(fileName) {
-		var inputFile = path.join(inputPath, fileName);
-		var stat = fs.statSync(inputFile);
-		var keep = stat.isFile() && fileName.substr(0,1) !== '.';
-		return {
-			inputFile: inputFile,
-			stat: stat,
-			keep: keep
-		};
-	}).filter(function(fileObj) {
-		return fileObj.keep;
+async function startOver(inputPath, outputPath, region = 'Home') {
+	return new Promise((resolve, reject) => {
+		if (!fs.existsSync(inputPath)) {
+			cerr(`Input directory <${inputPath}> doesn't exists`);
+			return reject();
+		}
+
+		if (!fs.existsSync(outputPath)) {
+			cerr(`Output directory <${outputPath}> doesn't exists`);
+			return reject();
+		}
+
+		let countOfProcessedFiles = 0;
+		let countOfErredFiles = 0;
+
+		const walker  = walk.walk(inputPath, { followLinks: false });
+
+		walker.on('file', async(root, stat, next) => {
+			const inputFile = path.join(root, stat.name);
+			const keep = stat.name.substr(0,1) !== '.';
+		
+			if (!keep) {
+				cwarn(`Ignoring file ${stat.name}`);
+				next();
+				return;
+			}
+
+			try {
+				await processFile(inputFile, stat, outputPath, region);
+				countOfProcessedFiles++;
+			} catch (err) {
+				cerr(err);
+				countOfErredFiles++;
+			}
+
+			next();
+		});
+
+		walker.on('end', function() {	
+			csucc(`Finished! ${countOfProcessedFiles} files processed, ${countOfErredFiles} files not processed`);
+			resolve();
+		});
 	});
-
-	if (files.length === 0) {
-		cwarn("No files found");
-	} else {
-		files.forEach(processFile);
-	}
 }
 
-function processFile(fileObj) {
-	new ExifImage({ 
-		image: fileObj.inputFile
-	}, function(err, data) {
-		if (!err && data && data.exif) fileObj.exif = data.exif;
-		choicePathForFile(fileObj);
+function processFile(inputFile, stat, outputPath, region) {
+	return new Promise((resolve, reject) => {
+		new ExifImage({ 
+			image: inputFile
+		}, async(err, data) => {
+			try {
+				const outputFile = await choicePathForFile(inputFile, stat, data ? data.exif : null, outputPath, region);
+				await moveFile(inputFile, outputFile);
+				resolve();
+			} catch (err) {
+				reject(err);
+			}
+		});
 	});
 }
 
-function choicePathForFile(fileObj) {
-	var date = null;
+async function choicePathForFile(inputFile, stat, exif, outputPath, region) {
+	let date = null;
 
-	if (fileObj.exif && fileObj.exif.DateTimeOriginal) {
-		date = moment(fileObj.exif.DateTimeOriginal.substr(0,10), "YYYY:MM:DD");
+	if (exif && (exif.DateTimeOriginal || exif.CreateDate)) {
+		date = moment((exif.DateTimeOriginal || exif.CreateDate).substr(0,10), "YYYY:MM:DD");
+	} else if (stat.birthtime) {
+		console.log(exif);
+		cwarn(`File <${inputFile}> doesn't contain EXIF data - fallback to creation date`);
+		date = moment(stat.birthtime);
 	} else {
-		cwarn("File <" + fileObj.inputFile + "> doesn't contain EXIF data - fallback to creation date");
-		date = moment( fs.statSync(fileObj.inputFile).birthtime );
+		cwarn(`File <${inputFile}> doesn't contain birthdate - fallback to NOW`);
+		date = moment();
 	}
 
-	fileObj.outputDirectory = path.join(
-		outputPath,
-		(date || moment()).format('YYYY'), 
-		region, 
-		(date ? date.format('YYYY-MM-DD') : 'NO_DATE')
-	);
-	fileObj.outputFile = path.join(fileObj.outputDirectory, path.basename(fileObj.inputFile));
-
-	moveFile(fileObj);
+	const inputFileBasename = path.basename(inputFile);
+	return path.join(outputPath, date.format('YYYY'), region, date.format('YYYY-MM-DD'), inputFileBasename);
 }
 
-function moveFile(fileObj) {
-	var baseConsoleFile = fileObj.outputFile.replace(outputPath, '');
-
-	if (fs.existsSync(fileObj.outputFile)) {
-		cwarn("File <" + baseConsoleFile + "> already exists");
-	} else {
-		console.log("Moving <" + baseConsoleFile + ">");
-		fs.createDirSync(fileObj.outputDirectory);
-		fs.moveSync(fileObj.inputFile, fileObj.outputFile);
+async function moveFile(inputFile, outputFile) {
+	if (fs.existsSync(outputFile)) {
+		throw `File <${outputFile}> already exists, refusing to overwrite`;
 	}
-}
 
+	clog(`Moving <${inputFile}> to <${outputFile}>`);
+
+	const dirName = path.dirname(outputFile);
+	if (!fs.existsSync(dirName)) {
+		clog(`Creating support directory ${dirName}`);
+		fs.createDirSync(dirName);
+	}
+
+	fs.moveSync(inputFile, outputFile);
+}
 
 //////////
 // Init //
 //////////
 
+const config = new Configstore(manifest.name);
+
 if (argv.configure) {
-	inquirer.prompt(getOpt(), function(answers) {
+	inquirer.prompt(getOpt(), (answers) => {
 		config.set('inputDirectory', answers.inputDirectory);
 		config.set('outputDirectory', answers.outputDirectory);
 		config.set('region', answers.region);
 	});
-} else if (argv.cron) {
-	inputPath = config.get('inputDirectory').replace(/\\ /g, ' ').trim();
-	outputPath = config.get('outputDirectory').replace(/\\ /g, ' ').trim();
-	region = config.get('region');
-	startOver();
 } else {
-	inquirer.prompt(getOpt(), function(answers) {
-		inputPath = answers.inputDirectory.replace(/\\ /g, ' ').trim();
-		outputPath = answers.outputDirectory.replace(/\\ /g, ' ').trim();
-		region = answers.region;
-		startOver();
-	});
+	if (argv.cron) {
+		const inputPath = config.get('inputDirectory').replace(/\\ /g, ' ').trim();
+		const outputPath = config.get('outputDirectory').replace(/\\ /g, ' ').trim();
+		const region = config.get('region');
+		startOver(inputPath, outputPath, region);
+	} else {
+		inquirer.prompt(getOpt(), (answers) => {
+			const inputPath = answers.inputDirectory.replace(/\\ /g, ' ').trim();
+			const outputPath = answers.outputDirectory.replace(/\\ /g, ' ').trim();
+			const region = answers.region;
+			startOver(inputPath, outputPath, region);
+		});
+	}
 }
 
