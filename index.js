@@ -116,7 +116,6 @@ async function choicePathForFile(inputFile, stat, exif, outputPath, region) {
 	if (exif && (exif.DateTimeOriginal || exif.CreateDate)) {
 		date = moment((exif.DateTimeOriginal || exif.CreateDate).substr(0,10), "YYYY:MM:DD");
 	} else if (stat.birthtime) {
-		console.log(exif);
 		cwarn(`File <${inputFile}> doesn't contain EXIF data - fallback to creation date`);
 		date = moment(stat.birthtime);
 	} else {
